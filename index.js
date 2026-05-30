@@ -19,16 +19,16 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 8787;
 const AI_PROVIDER = (process.env.AI_PROVIDER ?? "openrouter").trim().toLowerCase();
 const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY ?? "").trim();
 
-// ЖЕСТКО СТАВИМ РАБОЧУЮ БЕСПЛАТНУЮ МОДЕЛЬ OPENROUTER
-const OPENROUTER_MODEL = "google/gemini-2.5-flash:free";
-const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
+// Динамически берем из окружения Render, если пусто — ставим рабочий дефолт
+const OPENROUTER_MODEL = (process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash:free").trim();
+const OPENROUTER_API_BASE = (process.env.OPENROUTER_API_BASE ?? "https://openrouter.ai/api/v1").trim();
 
 const APP_URL = (process.env.APP_URL ?? "").trim();
 const APP_NAME = (process.env.APP_NAME ?? "StudyMate AI").trim();
 
 const NVIDIA_API_KEY = (process.env.NVIDIA_API_KEY ?? "").trim();
-const NVIDIA_MODEL = "google/gemini-2.5-flash:free";
-const NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1";
+const NVIDIA_MODEL = (process.env.NVIDIA_MODEL ?? "google/gemini-2.5-flash:free").trim();
+const NVIDIA_API_BASE = (process.env.NVIDIA_API_BASE ?? "https://integrate.api.nvidia.com/v1").trim();
 
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
@@ -128,8 +128,8 @@ function aiProviderKeyHint() {
 async function openrouterChatCompletion({ messages, temperature = 0.6, responseFormat }) {
   const headers = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-    "HTTP-Referer": APP_URL || "http://localhost:8787",
+    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+    "HTTP-Referer": APP_URL || "https://studymate-server-9shn.onrender.com",
     "X-Title": APP_NAME || "StudyMate AI",
   };
 
@@ -177,7 +177,7 @@ async function nvidiaChatCompletion({ messages, temperature = 0.6 }) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${NVIDIA_API_KEY}`,
+      "Authorization": `Bearer ${NVIDIA_API_KEY}`,
     },
     body: JSON.stringify({
       model: NVIDIA_MODEL,
@@ -377,7 +377,7 @@ function buildFallbackDay(topic, i, safeSubject) {
     minutes,
     difficulty: i % 3 === 0 ? "Лёгкий уровень" : i % 3 === 1 ? "Средний уровень" : "Повышенный уровень",
     whatIsTitle: `Что такое «${topic}»?`,
-    whatIs:
+    whatIs =
       `Тема «${topic}» важна в курсе «${safeSubject}». Сначала пойми идею: какую задачу решает это понятие и зачем оно нужно на экзамене. ` +
       `Добавь простую аналогию из жизни (скорость, рост, оптимизация времени) — так проще держать смысл в голове, а не только формулы. ` +
       `Затем сформулируй определение своими словами в 2–4 предложениях и сверь с учебником.`,
@@ -514,7 +514,7 @@ app.post("/plan/generate", async (req, res) => {
       `Предмет: ${safeSubject}\n` +
       `Дата экзамена: ${safeExamDate}\n` +
       `Темы (по порядку дней): ${safeTopics.join(", ")}\n\n` +
-      `Для КАЖДОЙ темы дай развёрнутый учебный мини-урок:\n` +
+      `Для КАЖДОЙ темы дай развёрнутый учебный mini-урок:\n` +
       `- minutes: 60–240\n` +
       `- difficulty: «Лёгкий уровень», «Средний уровень» или «Повышенный уровень»\n` +
       `- whatIsTitle, whatIs (3–6 предложений + аналогия), basicRules (4 пункта), applicationExamples (абзац)\n` +
