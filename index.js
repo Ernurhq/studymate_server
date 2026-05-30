@@ -1,15 +1,11 @@
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.post("/plan/generate", async (req, res) => {
-    // Выводим ключ в консоль, чтобы увидеть, видит ли его сервер
-    console.log("Ключ есть:", !!process.env.OPENROUTER_API_KEY);
-    
     try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -19,17 +15,14 @@ app.post("/plan/generate", async (req, res) => {
             },
             body: JSON.stringify({
                 model: "google/gemini-2.5-flash:free",
-                messages: [{ role: "user", content: "Привет. Напиши план подготовки в формате JSON." }]
+                messages: [{ role: "user", content: "Привет. Напиши план подготовки в JSON." }]
             })
         });
-
-        const text = await response.text();
-        console.log("Ответ от API:", text); // ВСЯ ПРАВДА БУДЕТ В ЛОГАХ
-        
-        res.status(200).send(text);
+        const data = await response.json();
+        res.json(data);
     } catch (e) {
-        res.status(500).send(e.message);
+        res.status(500).json({ error: e.message });
     }
 });
 
-app.listen(8787);
+app.listen(8787, () => console.log("Server running on 8787"));
