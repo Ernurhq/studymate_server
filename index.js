@@ -1,36 +1,47 @@
+import express from "express";
+import cors from "cors";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const PORT = process.env.PORT || 8787;
+
 app.post("/plan/generate", async (req, res) => {
     try {
         const { subject, examDate, topics } = req.body;
-        
+        const apiKey = process.env.OPENROUTER_API_KEY;
+
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                "Authorization": `Bearer ${apiKey}`,
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 model: "google/gemini-2.5-flash:free",
                 messages: [{ 
                     role: "user", 
-                    content: `Составь план подготовки для ${subject} до ${examDate} по темам: ${topics.join(", ")}. 
-                    ВЕРНИ ОТВЕТ ТОЛЬКО В ВИДЕ ЧИСТОГО JSON-ОБЪЕКТА. 
-                    Никаких пояснений, никакой разметки markdown, только сам JSON.
-                    Структура должна быть: {"subject": "...", "examDate": "...", "days": [{"day": 1, "topic": "...", "minutes": 60, "difficulty": "Средний", "whatIs": "...", "basicRules": ["1"], "practiceTasks": [{"prompt": "...", "solution": "..."}]}]}` 
+                    content: `Составь план подготовки для ${subject} до ${examDate}. Темы: ${topics.join(", ")}. Верни только JSON. Структура: {"subject": "${subject}", "examDate": "${examDate}", "days": [{"day": 1, "topic": "Тема", "minutes": 60, "difficulty": "Средний", "whatIs": "Описание", "basicRules": ["Правило"], "practiceTasks": [{"prompt": "Задача", "solution": "Решение"}]}]}`
                 }]
             })
         });
 
         const data = await response.json();
-        const rawContent = data.choices[0].message.content;
         
-        // Очищаем ответ от markdown блоков, если ИИ их все-таки пришлет
+        if (data.error) {
+            return res.status(500).json({ error: data.error.message });
+        }
+
+        const rawContent = data.choices[0].message.content;
         const cleanJson = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
         
-        // Превращаем текст в объект и отдаем фронтенду
         res.json({ plan: JSON.parse(cleanJson) });
         
     } catch (e) {
-        console.error("Ошибка генерации:", e);
-        res.status(500).json({ error: "Сервер не смог распарсить план от ИИ" });
+        console.error("Ошибка:", e);
+        res.status(500).json({ error: "Ошибка сервера" });
     }
 });
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
