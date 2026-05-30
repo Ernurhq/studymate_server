@@ -30,6 +30,7 @@ app.post("/plan/generate", async (req, res) => {
         const data = await response.json();
         
         if (data.error) {
+            console.error("API Error:", data.error);
             return res.status(500).json({ error: data.error.message });
         }
 
@@ -39,8 +40,8 @@ app.post("/plan/generate", async (req, res) => {
         res.json({ plan: JSON.parse(cleanJson) });
         
     } catch (e) {
-        console.error("Ошибка:", e);
-        res.status(500).json({ error: "Ошибка сервера" });
+        console.error("Server Error:", e);
+        res.status(500).json({ error: "Ошибка сервера: " + e.message });
     }
 });
 
