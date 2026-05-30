@@ -18,15 +18,17 @@ app.use(express.json({ limit: "5mb" }));
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8787;
 const AI_PROVIDER = (process.env.AI_PROVIDER ?? "openrouter").trim().toLowerCase();
 const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY ?? "").trim();
-// ИСПРАВЛЕНО: Заменили дефолтную модель OpenRouter на Gemini 2.5 Flash Free
-const OPENROUTER_MODEL = (process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash:free").trim();
-const OPENROUTER_API_BASE = (process.env.OPENROUTER_API_BASE ?? "https://openrouter.ai/api/v1").trim();
+
+// ЖЕСТКО СТАВИМ РАБОЧУЮ БЕСПЛАТНУЮ МОДЕЛЬ OPENROUTER
+const OPENROUTER_MODEL = "google/gemini-2.5-flash:free";
+const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
+
 const APP_URL = (process.env.APP_URL ?? "").trim();
 const APP_NAME = (process.env.APP_NAME ?? "StudyMate AI").trim();
+
 const NVIDIA_API_KEY = (process.env.NVIDIA_API_KEY ?? "").trim();
-// ИСПРАВЛЕНО: На всякий случай заменили дефолтную модель NVIDIA на Gemini
-const NVIDIA_MODEL = (process.env.NVIDIA_MODEL ?? "google/gemini-2.5-flash:free").trim();
-const NVIDIA_API_BASE = (process.env.NVIDIA_API_BASE ?? "https://integrate.api.nvidia.com/v1").trim();
+const NVIDIA_MODEL = "google/gemini-2.5-flash:free";
+const NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1";
 
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
