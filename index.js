@@ -7,6 +7,19 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8787;
 
+// --- МАРШРУТЫ АВТОРИЗАЦИИ (Чтобы ушла ошибка 404) ---
+app.post("/auth/register", (req, res) => {
+    // Временная заглушка, чтобы 404 пропала. 
+    // Если у тебя должна быть реальная БД, добавь логику здесь.
+    console.log("Регистрация:", req.body);
+    res.status(201).json({ message: "Успешно (заглушка)", token: "fake-token" });
+});
+
+app.post("/auth/login", (req, res) => {
+    res.json({ token: "fake-token" });
+});
+
+// --- МАРШРУТ ГЕНЕРАЦИИ ПЛАНА ---
 app.post("/plan/generate", async (req, res) => {
     try {
         const { subject, examDate, topics } = req.body;
@@ -30,7 +43,6 @@ app.post("/plan/generate", async (req, res) => {
         const data = await response.json();
         
         if (data.error) {
-            console.error("API Error:", data.error);
             return res.status(500).json({ error: data.error.message });
         }
 
@@ -40,7 +52,7 @@ app.post("/plan/generate", async (req, res) => {
         res.json({ plan: JSON.parse(cleanJson) });
         
     } catch (e) {
-        console.error("Server Error:", e);
+        console.error("Ошибка:", e);
         res.status(500).json({ error: "Ошибка сервера: " + e.message });
     }
 });
