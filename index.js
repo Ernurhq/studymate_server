@@ -1,17 +1,11 @@
-import dotenv from "dotenv";
-import express from "express";
-import cors from "cors";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-// Безопасное подключение встроенного модуля crypto для старых Node.js
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
+const dotenv = require("dotenv");
+const express = require("express");
+const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 const crypto = require("crypto");
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Инициализация окружения
 dotenv.config({ path: path.join(__dirname, ".env") });
 
 const app = express();
@@ -210,8 +204,8 @@ const generatePlanHandler = async (req, res) => {
   }
 
   try {
-    const prompt = `Ты репетитор. Составь JSON-план подготовки по предмету "${safeSubject}" до ${safeExamDate}. Темы: ${safeTopics.join(", ")}. 
-    Верни JSON объект с полями subject, examDate и массивом days (в каждом дне: day, topic, minutes, difficulty, whatIsTitle, whatIs, basicRules[], applicationExamples, practiceTasks[{prompt, solution}] из 10 штук). Не используй markdown разметку.`;
+    const jsonExample = `{"subject":"...","examDate":"...","days":[{"day":1,"topic":"...","minutes":120,"difficulty":"Средний уровень","whatIsTitle":"...","whatIs":"...","basicRules":["1","2"],"applicationExamples":"...","practiceTasks":[{"prompt":"...","solution":"..."}]}]}`;
+    const prompt = `Ты репетитор. Составь JSON-план подготовки по предмету "${safeSubject}" до ${safeExamDate}. Темы: ${safeTopics.join(", ")}. Верни JSON объект без markdown: ${jsonExample}`;
 
     let content = await aiChatCompletion({ messages: [{ role: "user", content: prompt }], temperature: 0.3 });
     content = content.replace(/```json/g, "").replace(/```/g, "").trim();
