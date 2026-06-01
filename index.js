@@ -1,15 +1,29 @@
-const dotenv = require("dotenv");
-const express = require("express");
-const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
+import dotenv from "dotenv";
+import express from "express";
+import cors from "cors";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import { fileURLToPath } from "url";
 
-// Инициализация окружения
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, ".env") });
 
 const app = express();
-app.use(cors());
+
+// 1. Мощная глобальная настройка CORS для браузеров (чтобы не было блокировок)
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
+}));
+
+// Перехватываем предзапросы OPTIONS, которые шлет браузер перед POST-запросом
+app.options("*", (req, res) => {
+  res.sendStatus(200);
+});
+
 app.use(express.json({ limit: "5mb" }));
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8787;
@@ -70,11 +84,13 @@ function getUserByToken(token) {
   if (!session) return null;
   const user = users.find((u) => u.id === session.userId);
   if (!user) return null;
+  const firstName = user.firstName || String(user.name || "").split(" ")[0] || "";
+  const lastName = user.lastName || String(user.name || "").split(" ").slice(1).join(" ").trim() || "";
   return {
     id: user.id,
-    firstName: user.firstName || "",
-    lastName: user.lastName || "",
-    name: user.name || `${user.firstName} ${user.lastName}`.trim(),
+    firstName,
+    lastName,
+    name: `${firstName}${lastName ? ` ${lastName}` : ""}`.trim() || user.name || "",
     email: user.email,
   };
 }
@@ -108,9 +124,7 @@ async function aiChatCompletion({ messages, temperature = 0.6 }) {
   let data;
   try { data = JSON.parse(text); } catch { data = null; }
 
-  if (!r.ok) {
-    throw new Error(data?.error?.message ?? `API error ${r.status}`);
-  }
+  if (!r.ok) throw new Error(data?.error?.message ?? `API error ${r.status}`);
   return data?.choices?.[0]?.message?.content?.trim() || "";
 }
 
@@ -126,7 +140,7 @@ ensureDataFiles();
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// --- Регистрация ---
+// --- РЕГИСТРАЦИЯ (Ловит и /auth/register, и /api/auth/register) ---
 const registerHandler = (req, res) => {
   const { firstName, lastName, email, password } = req.body ?? {};
   const safeFirstName = typeof firstName === "string" ? firstName.trim() : "";
@@ -137,17 +151,11 @@ const registerHandler = (req, res) => {
   if (safeFirstName.length < 2 || safeLastName.length < 2) {
     return res.status(400).json({ error: { message: "Имя и фамилия должны быть не короче 2 символов" } });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
-    return res.status(400).json({ error: { message: "Некорректный email" } });
-  }
-  if (safePassword.length < 6) {
-    return res.status(400).json({ error: { message: "Пароль должен быть не короче 6 символов" } });
-  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return res.status(400).json({ error: { message: "Некорректный email" } });
+  if (safePassword.length < 6) return res.status(400).json({ error: { message: "Пароль должен быть не короче 6 символов" } });
 
   const users = readJson(USERS_FILE, []);
-  if (users.some((u) => u.email === safeEmail)) {
-    return res.status(409).json({ error: { message: "Пользователь с таким email уже существует" } });
-  }
+  if (users.some((u) => u.email === safeEmail)) return res.status(409).json({ error: { message: "Пользователь с таким email уже существует" } });
 
   const salt = crypto.randomBytes(16).toString("hex");
   const passwordHash = hashPassword(safePassword, salt);
@@ -173,7 +181,7 @@ const registerHandler = (req, res) => {
 app.post("/auth/register", registerHandler);
 app.post("/api/auth/register", registerHandler);
 
-// --- Вход ---
+// --- ВХОД (Ловит и /auth/login, и /api/auth/login) ---
 const loginHandler = (req, res) => {
   const { email, password } = req.body ?? {};
   const safeEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
@@ -192,7 +200,35 @@ const loginHandler = (req, res) => {
 app.post("/auth/login", loginHandler);
 app.post("/api/auth/login", loginHandler);
 
-// --- Генерация плана ---
+// --- ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ---
+const studyDataGetHandler = (req, res) => {
+  const p = studyFilePath(req.authUser.id);
+  if (!fs.existsSync(p)) return res.json({ exams: [], plans: [], recentMaterials: [] });
+  const data = readJson(p, { exams: [], plans: [], recentMaterials: [] });
+  return res.json({
+    exams: Array.isArray(data.exams) ? data.exams : [],
+    plans: Array.isArray(data.plans) ? data.plans : [],
+    recentMaterials: Array.isArray(data.recentMaterials) ? data.recentMaterials : [],
+  });
+};
+app.get("/user/study-data", authenticateUser, studyDataGetHandler);
+app.get("/api/user/study-data", authenticateUser, studyDataGetHandler);
+
+// --- СОХРАНЕНИЕ ДАННЫХ ---
+const studyDataPutHandler = (req, res) => {
+  const body = req.body ?? {};
+  const payload = {
+    exams: Array.isArray(body.exams) ? body.exams : [],
+    plans: Array.isArray(body.plans) ? body.plans : [],
+    recentMaterials: Array.isArray(body.recentMaterials) ? body.recentMaterials : [],
+  };
+  writeJson(studyFilePath(req.authUser.id), payload);
+  return res.json({ ok: true });
+};
+app.put("/user/study-data", authenticateUser, studyDataPutHandler);
+app.put("/api/user/study-data", authenticateUser, studyDataPutHandler);
+
+// --- ГЕНЕРАЦИЯ ПЛАНА ---
 const generatePlanHandler = async (req, res) => {
   const { subject, examDate, topics } = req.body ?? {};
   const safeSubject = typeof subject === "string" ? subject.trim() : "";
