@@ -11,7 +11,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, ".env") });
 
-// Инициализация Express строго до использования роутов!
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
@@ -233,7 +232,8 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/auth/register", (req, res) => {
+// Роут регистрации (поддерживает оба варианта путей)
+const registerHandler = (req, res) => {
   const { firstName, lastName, email, password } = req.body ?? {};
   const safeFirstName = typeof firstName === "string" ? firstName.trim() : "";
   const safeLastName = typeof lastName === "string" ? lastName.trim() : "";
@@ -284,9 +284,12 @@ app.post("/auth/register", (req, res) => {
       email: user.email,
     },
   });
-});
+};
+app.post("/auth/register", registerHandler);
+app.post("/api/auth/register", registerHandler);
 
-app.post("/auth/login", (req, res) => {
+// Роут логина
+const loginHandler = (req, res) => {
   const { email, password } = req.body ?? {};
   const safeEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
   const safePassword = typeof password === "string" ? password : "";
@@ -307,9 +310,12 @@ app.post("/auth/login", (req, res) => {
     token,
     user: getUserByToken(token),
   });
-});
+};
+app.post("/auth/login", loginHandler);
+app.post("/api/auth/login", loginHandler);
 
-app.get("/auth/me", (req, res) => {
+// Роут проверки сессии
+const meHandler = (req, res) => {
   const token = parseBearerToken(req);
   if (!token) {
     return res.status(401).json({ error: { message: "Не авторизован" } });
@@ -319,9 +325,12 @@ app.get("/auth/me", (req, res) => {
     return res.status(401).json({ error: { message: "Сессия недействительна" } });
   }
   return res.json({ user });
-});
+};
+app.get("/auth/me", meHandler);
+app.get("/api/auth/me", meHandler);
 
-app.get("/user/study-data", authenticateUser, (req, res) => {
+// Получение данных обучения
+const getStudyDataHandler = (req, res) => {
   const p = studyFilePath(req.authUser.id);
   if (!fs.existsSync(p)) {
     return res.json({ exams: [], plans: [], recentMaterials: [] });
@@ -332,9 +341,12 @@ app.get("/user/study-data", authenticateUser, (req, res) => {
     plans: Array.isArray(data.plans) ? data.plans : [],
     recentMaterials: Array.isArray(data.recentMaterials) ? data.recentMaterials : [],
   });
-});
+};
+app.get("/user/study-data", authenticateUser, getStudyDataHandler);
+app.get("/api/user/study-data", authenticateUser, getStudyDataHandler);
 
-app.put("/user/study-data", authenticateUser, (req, res) => {
+// Сохранение данных обучения
+const putStudyDataHandler = (req, res) => {
   const body = req.body ?? {};
   const payload = {
     exams: Array.isArray(body.exams) ? body.exams : [],
@@ -343,7 +355,9 @@ app.put("/user/study-data", authenticateUser, (req, res) => {
   };
   writeJson(studyFilePath(req.authUser.id), payload);
   return res.json({ ok: true });
-});
+};
+app.put("/user/study-data", authenticateUser, putStudyDataHandler);
+app.put("/api/user/study-data", authenticateUser, putStudyDataHandler);
 
 function buildPracticeTasks(topic, safeSubject) {
   const mathy = /матем|алгебр|геометр|физик|хим|логарифм|производн|интеграл|уравнен/i.test(
@@ -353,13 +367,13 @@ function buildPracticeTasks(topic, safeSubject) {
   for (let i = 1; i <= 10; i++) {
     if (mathy) {
       tasks.push({
-        prompt: `Задача ${i} (типовая по теме «${topic}»): сформулируй условие по образцу из задачника (найди аналог в учебнике) и реши самостоятельно.`,
-        solution: `Решение: краткий ход — что дано, какая формула/метод, преобразования, ответ. Проверь ОДЗ и размерность. Задача ${i}: сверься с разбором в конце учебника.`,
+        prompt: `Задача ${i} (типовая по теме «${topic}»): сформулируй условие по образцу из задачника и реши самостоятельно.`,
+        solution: `Решение: краткий ход — формула, преобразования, ответ. Задача ${i}: сверься с разбором.`,
       });
     } else {
       tasks.push({
         prompt: `Блок ${i} по «${topic}»: ключевой тезис или вопрос, который часто встречается на экзамене.`,
-        solution: `Развёрнуто: определение, 2–3 аргумента, мини-пример или ситуация из практики. Свяжи с курсом «${safeSubject}».`,
+        solution: `Развёрнуто: определение, 2–3 аргумента, мини-пример. Курс «${safeSubject}».`,
       });
     }
   }
@@ -375,92 +389,54 @@ function buildFallbackDay(topic, i, safeSubject) {
     difficulty: i % 3 === 0 ? "Лёгкий уровень" : i % 3 === 1 ? "Средний уровень" : "Повышенный уровень",
     whatIsTitle: `Что такое «${topic}»?`,
     whatIs:
-      `Тема «${topic}» важна в курсе «${safeSubject}». Сначала пойми идею: какую задачу решает это понятие и зачем оно нужно на экзамене. ` +
-      `Добавь простую аналогию из жизни (скорость, рост, оптимизация времени) — так проще держать смысл в голове, а не только формулы. ` +
-      `Затем сформулируй определение своими словами в 2–4 предложениях и сверь с учебником.`,
+      `Тема «${topic}» важна в курсе «${safeSubject}». Сначала пойми главную идею. ` +
+      `Затем сформулируй определение своими словами в 2–4 предложениях.`,
     basicRules: [
       `Сформулируй определение «${topic}» и условия, когда оно применимо.`,
-      `Запиши 2–4 ключевых факта или формулы и отметь типичные ошибки.`,
-      `Разбей изучение на шаги: понятия → пример → контрольный вопрос себе.`,
-      `Реши минимум 2 задачи разного типа и сравни ход с эталоном.`,
+      `Запиши 2–4 ключевых факта или формулы.`,
+      `Реши минимум 2 задачи разного типа.`,
     ],
-    applicationExamples:
-      `Подумай, где «${topic}» встречается в задачах по «${safeSubject}» и в смежных темах: рост и изменение величин, сравнение сценариев, анализ графиков. ` +
-      `На экзамене обычно проверяют умение выбрать метод, а не только зазубрить формулировку.`,
+    applicationExamples: `Подумай, где «${topic}» встречается в реальных задачах экзамена по «${safeSubject}».`,
     explanation: "",
     practiceTasks: buildPracticeTasks(topic, safeSubject),
   };
 }
 
 function normalizePlanDay(d, i, safeSubject, safeTopics) {
-  const topic =
-    typeof d?.topic === "string" && d.topic.trim()
-      ? d.topic.trim()
-      : safeTopics[i] || `Тема ${i + 1}`;
+  const topic = typeof d?.topic === "string" && d.topic.trim() ? d.topic.trim() : safeTopics[i] || `Тема ${i + 1}`;
   const minutes = Number(d?.minutes) > 0 ? Number(d.minutes) : 45;
-  const difficulty =
-    typeof d?.difficulty === "string" && d.difficulty.trim()
-      ? d.difficulty.trim()
-      : "Средний уровень";
+  const difficulty = typeof d?.difficulty === "string" && d.difficulty.trim() ? d.difficulty.trim() : "Средний уровень";
   let whatIsTitle = typeof d?.whatIsTitle === "string" ? d.whatIsTitle.trim() : "";
   if (!whatIsTitle) whatIsTitle = `Что такое «${topic}»?`;
   const whatIsRaw = typeof d?.whatIs === "string" ? d.whatIs.trim() : "";
   const explanationRaw = typeof d?.explanation === "string" ? d.explanation.trim() : "";
-  const whatIs =
-    whatIsRaw ||
-    explanationRaw ||
-    `Разверни тему «${topic}» простым языком: зачем она нужна, основная идея, одна жизненная аналогия.`;
+  const whatIs = whatIsRaw || explanationRaw || `Разверни тему «${topic}» простым языком.`;
+  
   let basicRules = [];
   if (Array.isArray(d?.basicRules)) {
-    basicRules = d.basicRules
-      .filter((x) => typeof x === "string" && x.trim())
-      .map((x) => x.trim());
+    basicRules = d.basicRules.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim());
   }
   if (basicRules.length === 0) {
-    basicRules = [
-      `Сформулируй определение «${topic}» своими словами.`,
-      `Запиши ключевые формулы или факты и условия их применения.`,
-      `Реши 2–3 типовых задания и разбери ошибки.`,
-    ];
+    basicRules = [`Сформулируй определение своими словами.`, `Запиши формулы.`, `Реши задания.`];
   }
-  let applicationExamples =
-    typeof d?.applicationExamples === "string" ? d.applicationExamples.trim() : "";
-  if (!applicationExamples) {
-    applicationExamples =
-      `Где «${topic}» применяется в задачах по предмету «${safeSubject}»: свяжи абстрактное определение с 1–2 конкретными ситуациями из курса.`;
-  }
+
+  let applicationExamples = typeof d?.applicationExamples === "string" ? d.applicationExamples.trim() : "";
+  if (!applicationExamples) applicationExamples = `Применение темы «${topic}» в рамках предмета ${safeSubject}.`;
+
   let practiceTasks = [];
   if (Array.isArray(d?.practiceTasks)) {
     for (const x of d.practiceTasks) {
-      const prompt =
-        typeof x?.prompt === "string"
-          ? x.prompt.trim()
-          : typeof x?.question === "string"
-            ? x.question.trim()
-            : "";
-      const solution =
-        typeof x?.solution === "string"
-          ? x.solution.trim()
-          : typeof x?.answer === "string"
-            ? x.answer.trim()
-            : "";
+      const prompt = typeof x?.prompt === "string" ? x.prompt.trim() : typeof x?.question === "string" ? x.question.trim() : "";
+      const solution = typeof x?.solution === "string" ? x.solution.trim() : typeof x?.answer === "string" ? x.answer.trim() : "";
       if (prompt) {
-        practiceTasks.push({
-          prompt,
-          solution: solution || "Сверься с учебником и разбором по теме.",
-        });
+        practiceTasks.push({ prompt, solution: solution || "Сверься с учебником." });
       }
     }
   }
   if (practiceTasks.length === 0) {
     practiceTasks = buildPracticeTasks(topic, safeSubject);
-  } else if (practiceTasks.length < 8) {
-    const pad = buildPracticeTasks(topic, safeSubject);
-    let j = 0;
-    while (practiceTasks.length < 10 && j < pad.length) {
-      practiceTasks.push(pad[j++]);
-    }
   }
+  
   return {
     day: Number(d?.day) > 0 ? Number(d.day) : i + 1,
     topic,
@@ -475,57 +451,37 @@ function normalizePlanDay(d, i, safeSubject, safeTopics) {
   };
 }
 
-app.post("/plan/generate", async (req, res) => {
+// Роут генерации плана
+const generatePlanHandler = async (req, res) => {
   const { subject, examDate, topics } = req.body ?? {};
   const safeSubject = typeof subject === "string" ? subject.trim() : "";
   const safeExamDate = typeof examDate === "string" ? examDate.trim() : "";
-  const safeTopics = Array.isArray(topics)
-    ? topics.map((t) => (typeof t === "string" ? t.trim() : "")).filter(Boolean)
-    : [];
+  const safeTopics = Array.isArray(topics) ? topics.map((t) => (typeof t === "string" ? t.trim() : "")).filter(Boolean) : [];
 
   if (!safeSubject || !safeExamDate || safeTopics.length === 0) {
-    return res.status(400).json({
-      error: { message: "Нужно передать предмет, дату экзамена и список тем" },
-    });
+    return res.status(400).json({ error: { message: "Нужно передать предмет, дату экзамена и список тем" } });
   }
 
   if (!hasAiProviderKey()) {
     const fallbackDays = safeTopics.map((topic, i) => buildFallbackDay(topic, i, safeSubject));
-    return res.json({
-      plan: {
-        subject: safeSubject,
-        examDate: safeExamDate,
-        days: fallbackDays,
-      },
-    });
+    return res.json({ plan: { subject: safeSubject, examDate: safeExamDate, days: fallbackDays } });
   }
 
   try {
-    const jsonExample =
-      `{"subject":"...","examDate":"...","days":[{"day":1,"topic":"...","minutes":120,"difficulty":"Средний уровень",` +
-      `"whatIsTitle":"Что такое «...»?","whatIs":"текст","basicRules":["1","2","3","4"],"applicationExamples":"абзац",` +
-      `"practiceTasks":[{"prompt":"условие задачи 1","solution":"полное решение 1"}, ... ещё 8-9 объектов]}]}`;
+    const jsonExample = `{"subject":"...","examDate":"...","days":[{"day":1,"topic":"...","minutes":120,"difficulty":"Средний уровень","whatIsTitle":"...","whatIs":"...","basicRules":["1","2"],"applicationExamples":"...","practiceTasks":[{"prompt":"...","solution":"..."}]}]}`;
 
     const prompt =
       `Ты методист и репетитор. Составь план подготовки к экзамену на русском языке.\n\n` +
       `Предмет: ${safeSubject}\n` +
       `Дата экзамена: ${safeExamDate}\n` +
       `Темы (по порядку дней): ${safeTopics.join(", ")}\n\n` +
-      `Для КАЖДОЙ темы дай развёрнутый учебный мини-урок:\n` +
-      `- minutes: 60–240\n` +
-      `- difficulty: «Лёгкий уровень», «Средний уровень» или «Повышенный уровень»\n` +
-      `- whatIsTitle, whatIs (3–6 предложений + аналогия), basicRules (4 пункта), applicationExamples (абзац)\n` +
-      `- practiceTasks: ровно 10 элементов. Если предмет математика/физика/химия или тема явно числовая — для каждого элемента поля prompt (условие) и solution (подробное решение). ` +
-      `Иначе (гуманитарные дисциплины) prompt = короткий вопрос/тезис, solution = развёрнутый полезный ответ (как мини-конспект).\n\n` +
-      `Верни ТОЛЬКО валидный JSON объект без markdown форматирования:\n` +
-      jsonExample;
+      `Верни ТОЛЬКО валидный JSON без markdown по следующей структуре:\n` + jsonExample;
 
     let content = await aiChatCompletion({
       messages: [{ role: "user", content: prompt }],
       temperature: 0.4,
     });
 
-    // Безопасная очистка markdown-тегов, если Gemini решит их добавить в текстовом режиме
     content = content.replace(/```json/g, "").replace(/```/g, "").trim();
 
     const parsedPlan = tryParseJsonObjectFromText(content);
@@ -534,80 +490,54 @@ app.post("/plan/generate", async (req, res) => {
     }
 
     const daysRaw = Array.isArray(parsedPlan?.days) ? parsedPlan.days : [];
-    let days = daysRaw
-      .map((d, i) => normalizePlanDay(d, i, safeSubject, safeTopics))
-      .filter((d) => d.topic);
+    let days = daysRaw.map((d, i) => normalizePlanDay(d, i, safeSubject, safeTopics)).filter((d) => d.topic);
+    
     if (days.length < safeTopics.length) {
       for (let i = days.length; i < safeTopics.length; i++) {
         days.push(buildFallbackDay(safeTopics[i], i, safeSubject));
       }
     }
 
-    if (days.length === 0) {
-      return res.status(502).json({ error: { message: "План получился пустым" } });
-    }
-
     return res.json({
       plan: {
-        subject: typeof parsedPlan.subject === "string" && parsedPlan.subject.trim()
-          ? parsedPlan.subject.trim()
-          : safeSubject,
-        examDate:
-          typeof parsedPlan.examDate === "string" && parsedPlan.examDate.trim()
-            ? parsedPlan.examDate.trim()
-            : safeExamDate,
+        subject: parsedPlan.subject || safeSubject,
+        examDate: parsedPlan.examDate || safeExamDate,
         days,
       },
     });
   } catch (e) {
-    return res.status(500).json({
-      error: { message: e?.message ? String(e.message) : "Ошибка генерации плана" },
-    });
+    return res.status(500).json({ error: { message: e?.message ? String(e.message) : "Ошибка генерации плана" } });
   }
-});
+};
+app.post("/plan/generate", generatePlanHandler);
+app.post("/api/plan/generate", generatePlanHandler);
 
-app.post("/chat", async (req, res) => {
+// Роут чата
+const chatHandler = async (req, res) => {
   try {
     const { message, history } = req.body ?? {};
     if (typeof message !== "string" || !message.trim()) {
-      return res.status(400).json({
-        error: { message: "Missing 'message' string" },
-      });
+      return res.status(400).json({ error: { message: "Missing 'message' string" } });
     }
-
-    const safeHistory = Array.isArray(history) ? history : [];
 
     if (!hasAiProviderKey()) {
-      return res.status(400).json({
-        error: { message: `Missing ${aiProviderKeyHint()} in server environment` },
-      });
+      return res.status(400).json({ error: { message: `Missing ${aiProviderKeyHint()} in server environment` } });
     }
 
-    const system =
-      "Ты StudyMate AI — дружелюбный помощник студенту. Отвечай по-русски, коротко, ясно и по делу. " +
-      "Если вопрос про математику — дай простое объяснение и мини-пример.";
-
     const messages = [
-      { role: "system", content: system },
-      ...safeHistory
-        .filter(
-          (m) =>
-            m &&
-            (m.role === "user" || m.role === "assistant") &&
-            typeof m.content === "string"
-        )
-        .map((m) => ({ role: m.role, content: m.content })),
+      { role: "system", content: "Ты StudyMate AI — дружелюбный помощник студенту." },
+      ...(Array.isArray(history) ? history : []).map((m) => ({ role: m.role, content: m.content })),
       { role: "user", content: message.trim() },
     ];
 
     const reply = await aiChatCompletion({ messages, temperature: 0.6 });
     return res.json({ reply });
   } catch (e) {
-    return res.status(500).json({
-      error: { message: e?.message ? String(e.message) : "Server error" },
-    });
+    return res.status(500).json({ error: { message: e?.message ? String(e.message) : "Server error" } });
   }
-});
+};
+app.post("/chat", chatHandler);
+app.post("/api/chat", chatHandler);
 
 app.listen(PORT, () => {
   console.log(`[studymate-ai-proxy] listening on http://localhost:${PORT}`);
